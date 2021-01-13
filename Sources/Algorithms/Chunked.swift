@@ -271,7 +271,7 @@ public struct ChunkedByCount<Base: Collection> {
   internal let chunkCount: Int
   
   @usableFromInline
-  internal var computedStartIndex: Index
+  internal var cachedStartUpperBound: Base.Index
 
   ///  Creates a view instance that presents the elements of `base`
   ///  in `SubSequence` chunks of the given count.
@@ -284,13 +284,10 @@ public struct ChunkedByCount<Base: Collection> {
     
     // Compute the start index upfront in order to make
     // start index a O(1) lookup.
-    let baseEnd = _base.index(
-      _base.startIndex, offsetBy: _chunkCount,
-      limitedBy: _base.endIndex
-    ) ?? _base.endIndex
-    
-    self.computedStartIndex =
-      Index(_baseRange: _base.startIndex..<baseEnd)
+    self.cachedStartUpperBound = _base.index(_base.startIndex,
+                                             offsetBy: _chunkCount,
+                                             limitedBy: _base.endIndex)
+      ?? _base.endIndex
   }
 }
 
@@ -307,7 +304,9 @@ extension ChunkedByCount: Collection {
 
   /// - Complexity: O(1)
   @inlinable
-  public var startIndex: Index { computedStartIndex }
+  public var startIndex: Index {
+    Index(_baseRange: base.startIndex..<cachedStartUpperBound)
+  }
   @inlinable
   public var endIndex: Index {
     Index(_baseRange: base.endIndex..<base.endIndex)
