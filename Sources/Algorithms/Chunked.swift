@@ -251,6 +251,36 @@ extension Collection {
 // chunks(ofCount:)
 //===----------------------------------------------------------------------===//
 
+/// An index for an element (or past-the-end) of a `ChunkedByCount` collection.
+public struct ChunkedByCountIndex<Base: Comparable> {
+  // Using a separate type, instead of one embedded in ChunkedByCount, allows
+  // ChunkedByCount<T> and ChunkedByCount<T.SubSequence> share indices.
+
+  @usableFromInline
+  internal let baseRange: Range<Base>
+
+  @usableFromInline
+  internal init(_baseRange: Range<Base>) {
+    self.baseRange = _baseRange
+  }
+}
+
+extension ChunkedByCountIndex: Equatable {}
+
+extension ChunkedByCountIndex: Comparable {
+  public static func < (lhs: Self, rhs: Self) -> Bool {
+    // Intervals are harder to do straight comparisons for.  But any cross-
+    // overlap between non-identical ranges means the operands weren't from
+    // compatible collections to begin with, a precondition violation.
+    //
+    // (Similar reasoning applies for not bothering to do a customized defintion
+    // for the equality operator.)
+    return lhs.baseRange.lowerBound < rhs.baseRange.lowerBound
+  }
+}
+
+extension ChunkedByCountIndex: Hashable where Base: Hashable {}
+
 /// A collection that presents the elements of its base collection
 /// in `SubSequence` chunks of any given count.
 ///
@@ -292,15 +322,7 @@ public struct ChunkedByCount<Base: Collection> {
 }
 
 extension ChunkedByCount: Collection {
-  public struct Index {
-    @usableFromInline
-    internal let baseRange: Range<Base.Index>
-    
-    @usableFromInline
-    internal init(_baseRange: Range<Base.Index>) {
-      self.baseRange = _baseRange
-    }
-  }
+  public typealias Index = ChunkedByCountIndex<Base.Index>
 
   /// - Complexity: O(1)
   @inlinable
@@ -326,14 +348,6 @@ extension ChunkedByCount: Collection {
       limitedBy: base.endIndex
     ) ?? base.endIndex
     return Index(_baseRange: i.baseRange.upperBound..<baseIdx)
-  }
-}
-
-extension ChunkedByCount.Index: Comparable {
-  @inlinable
-  public static func < (lhs: ChunkedByCount.Index,
-                        rhs: ChunkedByCount.Index) -> Bool {
-    lhs.baseRange.lowerBound < rhs.baseRange.lowerBound
   }
 }
 
@@ -493,7 +507,6 @@ extension ChunkedByCount: Hashable where Base: Hashable {
     hasher.combine(base)
   }
 }
-extension ChunkedByCount.Index: Hashable where Base.Index: Hashable {}
 
 // Lazy conditional conformance.
 extension ChunkedByCount: LazySequenceProtocol
