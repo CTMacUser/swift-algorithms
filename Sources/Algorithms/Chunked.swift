@@ -254,7 +254,7 @@ extension Collection {
 /// An index for an element (or past-the-end) of a `ChunkedByCount` collection.
 public struct ChunkedByCountIndex<Base: Comparable> {
   // Using a separate type, instead of one embedded in ChunkedByCount, allows
-  // ChunkedByCount<T> and ChunkedByCount<T.SubSequence> share indices.
+  // ChunkedByCount<T> and ChunkedByCount<T.SubSequence> to share indices.
 
   @usableFromInline
   internal let baseRange: Range<Base>
@@ -303,26 +303,34 @@ public struct ChunkedByCount<Base: Collection> {
   @usableFromInline
   internal var cachedStartUpperBound: Base.Index
 
+  /// Creates a view instance that presents the elements of the given collection
+  /// as `SubSequence` chunks with the given count, caching the given index for
+  /// where the first chunk ends.
+  ///
+  /// - Complexity: O(1)
+  @inlinable
+  internal init(_base: Base, _chunkCount: Int, _firstChunkEnd: Base.Index) {
+    self.base = _base
+    self.chunkCount = _chunkCount
+    self.cachedStartUpperBound = _firstChunkEnd
+  }
   ///  Creates a view instance that presents the elements of `base`
   ///  in `SubSequence` chunks of the given count.
   ///
   /// - Complexity: O(n)
   @inlinable
   internal init(_base: Base, _chunkCount: Int) {
-    self.base = _base
-    self.chunkCount = _chunkCount
-    
     // Compute the start index upfront in order to make
     // start index a O(1) lookup.
-    self.cachedStartUpperBound = _base.index(_base.startIndex,
-                                             offsetBy: _chunkCount,
-                                             limitedBy: _base.endIndex)
-      ?? _base.endIndex
+    let baseEnd = _base.index(_base.startIndex, offsetBy: _chunkCount,
+                              limitedBy: _base.endIndex) ?? _base.endIndex
+    self.init(_base: _base, _chunkCount: _chunkCount, _firstChunkEnd: baseEnd)
   }
 }
 
 extension ChunkedByCount: Collection {
   public typealias Index = ChunkedByCountIndex<Base.Index>
+  public typealias SubSequence = ChunkedByCount<Base.SubSequence>
 
   /// - Complexity: O(1)
   @inlinable
@@ -338,6 +346,19 @@ extension ChunkedByCount: Collection {
   public subscript(i: Index) -> Element {
     precondition(i < endIndex, "Index out of range")
     return base[i.baseRange]
+  }
+  public subscript(bounds: Range<Index>) -> SubSequence {
+    let lowerRange = bounds.lowerBound.baseRange,
+        upperRange = bounds.upperBound.baseRange
+    let resultBounds: Range<Base.Index>
+    if lowerRange.lowerBound < upperRange.lowerBound {
+      resultBounds = lowerRange.lowerBound ..< upperRange.upperBound
+    } else {
+      resultBounds = lowerRange.lowerBound ..< upperRange.lowerBound
+      assert(resultBounds.isEmpty)
+    }
+    return SubSequence(_base: base[resultBounds], _chunkCount: chunkCount,
+                       _firstChunkEnd: lowerRange.upperBound)
   }
   
   @inlinable
